@@ -4,28 +4,32 @@ Review target: the checked-in `index.html`, `leaf_model.onnx`, `model_info.json`
 
 ## 1. Runs on a phone
 
-**What I did:** Opened the public Pages URL, `https://emafelixova.github.io/mlr-ex08/`, and inspected the camera flow in `index.html`. The page requests `facingMode: environment`, displays the stream in a `playsinline` video, and classifies frames repeatedly after the model is ready.
+**What I did:** Opened the public Pages URL, `https://emafelixova.github.io/mlr-ex08/`, and inspected the camera flow in `index.html`. The supplied phone screenshot shows the live camera pointed at a leaf image on another screen, with predictions updating.
 
-**What I found:** The Pages page and model load in the browser. I have not verified live-camera access on an iPhone. The required phone screenshot with a leaf and probabilities has not been supplied, so this requirement is still **pending**.
+**What I found:** The screenshot shows the live camera active and these probabilities: apple 8.9817%, cherry 5.8462%, chestnut 83.1749%, and maple 1.9973%. The top prediction is chestnut. The screenshot demonstrates live camera inference on a phone.
 
-**What was fixed:** No phone-specific change was made without a phone test. Add the phone screenshot here after opening the Pages URL and confirming that camera permission and live predictions work.
+**What was fixed:** No code fix was needed; the phone screenshot confirms the rear-camera flow and live predictions work for this test.
 
-**Evidence:** _Pending phone screenshot._
+**Evidence:**
+
+![Phone screenshot showing the live leaf camera and class probabilities](phone_camera_test.jpg)
 
 ## 2. Check image probabilities
 
-**What I did:** Compared `check_image.jpg` with `check_expected.json` using the current ONNX model and the page's center-crop, resize, and normalization steps. I also attempted to select the image through the live page's upload control, but the browser's file-upload permission check declined the action; I did not retry it through another route.
+**What I did:** Reviewed your screenshot after you selected `check_image.jpg` on the live page. The page reports `uploaded photo` and displays the four probabilities below.
 
-**What I found:** The local ONNX inference agrees with the expected values to three decimals. The actual values below are from local inference with the page's preprocessing; they are not represented as a completed browser-upload result.
+**What I found:** The page's displayed results agree with `check_expected.json` to three decimals. The page shows percentages; the probabilities below convert those displayed values to 0–1. Its display rounds to four decimal places in percent, so the chestnut value differs in the sixth decimal as shown.
 
-| Class | Inference probability | `check_expected.json` | To three decimals |
+| Class | Page upload probability | `check_expected.json` | To three decimals |
 | --- | ---: | ---: | --- |
-| apple | 0.538040638 | 0.538040578 | 0.538 = 0.538 |
-| cherry | 0.427219599 | 0.427219361 | 0.427 = 0.427 |
-| chestnut | 0.025417337 | 0.025417605 | 0.025 = 0.025 |
-| maple | 0.009322396 | 0.009322453 | 0.009 = 0.009 |
+| apple | 0.538041 | 0.538040578 | 0.538 = 0.538 |
+| cherry | 0.427219 | 0.427219361 | 0.427 = 0.427 |
+| chestnut | 0.025417 | 0.025417605 | 0.025 = 0.025 |
+| maple | 0.009322 | 0.009322453 | 0.009 = 0.009 |
 
-**What was fixed:** No code change was needed for the numerical comparison. The on-page upload step remains unverified because the browser blocked file selection.
+**What was fixed:** No code change was needed. The upload test is now verified from the supplied screenshot.
+
+![Phone screenshot showing check_image.jpg uploaded and its class probabilities](phone_upload_check_test.png)
 
 ## 3. Preprocessing matches the model and notebook
 
@@ -43,10 +47,9 @@ The notebook says the Task 2 training images were center-cropped and resized to 
 
 **What I found:** Camera frames and selected photos are drawn to a browser canvas and passed to ONNX Runtime Web in the browser. The page has no image-upload endpoint or remote inference call, so it does not send the image to the model host or CDN. The page requests:
 
-- `https://emafelixova.github.io/mlr-ex08/` for the page and same-origin model files;
-- `./model_info.json` and `./leaf_model.onnx` from that Pages site, to configure and run the classifier;
-- `https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js` for ONNX Runtime Web;
-- WebAssembly runtime assets from `https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/` so inference can run in the browser.
+- the GitHub Pages host for the page, `model_info.json`, and `leaf_model.onnx`;
+- the jsDelivr CDN for `ort.min.js`;
+- the jsDelivr CDN for ONNX Runtime WebAssembly assets so inference can run in the browser.
 
 The QR code is embedded in the HTML as a data image and makes no QR-service request. These requests transfer the page, model metadata, model, and runtime code; they do not contain the camera frame or selected photo. The hosting and CDN services still receive ordinary page and asset requests from the browser.
 
