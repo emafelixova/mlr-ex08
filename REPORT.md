@@ -29,4 +29,14 @@ All rows below are mean accuracy ± standard deviation across seeds 0, 1, and 2.
 
 ## Phone recommendation
 
-I would put the **frozen pretrained MobileNetV3 Small with ColorJitter, AdamW (weight decay 1e-4), and label smoothing 0.1, trained on group plus historical training images** on the phone. It achieved 84.9% regular group, 82.8% camera-like group, and 84.2% historical validation accuracy across three seeds. The exported `leaf_model.onnx` uses seed 2, best checkpoint epoch 5; its logits matched PyTorch within 6.2×10⁻⁶ on the check image. The course camera app/device check remains to be done; it was unavailable during this work.
+I would put the **frozen pretrained MobileNetV3 Small with ColorJitter, AdamW (weight decay 1e-4), and label smoothing 0.1, trained on group plus historical training images** on the phone. It achieved 84.9% regular group, 82.8% camera-like group, and 84.2% historical validation accuracy across three seeds. The exported `leaf_model.onnx` uses seed 2, best checkpoint epoch 5; its logits matched PyTorch within 6.2×10⁻⁶ on the check image.
+
+## Phone-camera check
+
+I tested the exported model on a phone using the GitHub Pages app. The live camera recognized the leaf image displayed on another screen as chestnut (83.1749%; apple 8.9817%, cherry 5.8462%, maple 1.9973%). This verifies the camera inference flow in that test; the leaf was shown on a screen rather than photographed outdoors.
+
+![Phone camera test showing live predictions](phone_camera_test.jpg)
+
+I also uploaded `check_image.jpg` through the app. The displayed probabilities were apple 53.8041%, cherry 42.7219%, chestnut 2.5417%, and maple 0.9322%; these match `check_expected.json` to three decimal places.
+
+![Phone upload test showing check image predictions](phone_upload_check_test.png)
