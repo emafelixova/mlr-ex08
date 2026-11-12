@@ -1,0 +1,8 @@
+task4_data/
+task4_results/checkpoints/
+task4_results/camera_like/
+task4_results/leaf_model_task2_original.onnx
+task4_results/results.jsonl
+mobilenet_v3_small-047dcff4.pth
+__pycache__/
+task4_results/individual_summary.json
