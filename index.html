@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f5ef">
+  <title>Leaf Classifier</title>
+  <style>
+    :root{color-scheme:light;--ink:#19352c;--muted:#66786e;--green:#30624a;--line:#dce5dc;--paper:#fff;--bg:#f4f5ef}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom)}
+    main{max-width:680px;margin:0 auto;padding:26px 0 32px}.eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:11px;color:var(--green);font-weight:700}h1{font-size:clamp(28px,8vw,42px);line-height:1.05;margin:8px 0}.intro{color:var(--muted);margin:0 0 20px;line-height:1.5}
+    .card{background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:16px;margin:14px 0;box-shadow:0 8px 24px #19352c0a}.stage{position:relative;overflow:hidden;border-radius:14px;background:#17251c;aspect-ratio:1;display:grid;place-items:center}.stage video,.stage img{position:absolute;width:100%;height:100%;object-fit:cover}.stage video{display:none}.stage img{object-fit:contain}.stage .guide{position:absolute;width:72%;aspect-ratio:1;border:1.5px solid #fff9;border-radius:8px;box-shadow:0 0 0 999px #101a1640;pointer-events:none}.stage .placeholder{color:#fff9;text-align:center;padding:20px;z-index:1}.stage.live video{display:block}.stage.live img,.stage.live .placeholder{display:none}
+    .actions{display:flex;gap:10px;margin-top:13px;flex-wrap:wrap}button,.upload{border:0;border-radius:12px;padding:12px 15px;font:600 14px inherit;background:var(--green);color:white;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:44px}.upload{background:#e9efe8;color:var(--ink)}button:disabled{opacity:.5}.upload input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}.status{font-size:13px;color:var(--muted);margin:12px 2px 0;min-height:19px}.status.error{color:#a33}
+    .results-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}.results-head h2,.qr h2{font-size:18px;margin:0}.badge{font-size:11px;color:var(--muted)}.row{margin:12px 0}.rowtop{display:flex;justify-content:space-between;text-transform:capitalize;font-size:14px;margin-bottom:6px}.track{height:10px;border-radius:99px;background:#edf1eb;overflow:hidden}.fill{height:100%;width:0;background:linear-gradient(90deg,#8dbb83,#30624a);border-radius:inherit;transition:width .15s}.row:first-of-type .fill{background:linear-gradient(90deg,#a3cb8e,#42744d)}
+    .qr{display:flex;align-items:center;gap:16px}.qr h2{margin-bottom:5px}.qr p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}.qr a{color:var(--green);overflow-wrap:anywhere;font-weight:600}.qr canvas{width:112px;height:112px;image-rendering:pixelated;background:white;padding:5px;border-radius:8px;flex:none}.foot{font-size:11px;color:var(--muted);text-align:center;margin-top:20px}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+</head>
+<body><main>
+  <div class="eyebrow">Field guide · live inference</div><h1>Leaf classifier</h1><p class="intro">Point your rear camera at a single leaf, or choose a photo. Keep the leaf inside the square guide.</p>
+  <section class="card">
+    <div class="stage" id="stage"><video id="video" autoplay muted playsinline></video><img id="photo" alt="Selected leaf"><div class="guide"></div><div class="placeholder">Camera preview appears here</div></div>
+    <div class="actions"><button id="cameraBtn" type="button">Start rear camera</button><label class="upload">Choose a photo<input id="fileInput" type="file" accept="image/*"></label></div>
+    <p class="status" id="status" aria-live="polite">Loading the leaf model…</p>
+  </section>
+  <section class="card"><div class="results-head"><h2>Class probabilities</h2><span class="badge" id="mode">waiting for image</span></div><div id="results"></div></section>
+  <section class="card qr"><canvas id="qr" aria-label="QR code linking to this leaf classifier"></canvas><div><h2>Open on your phone</h2><p>Scan this QR code or open <a id="pageLink" href="#">this page</a>.</p></div></section>
+  <p class="foot">Your images are processed on this device.</p>
+</main>
+<script>
+(() => {
+  'use strict';
+  let INFO={classes:['apple','cherry','chestnut','maple'],input_size:96,mean:[0.485,0.456,0.406],std:[0.229,0.224,0.225]};
+  const PAGE_URL='https://emafelixova.github.io/mlr-ex08/';
+  const $=id=>document.getElementById(id), video=$('video'), stage=$('stage'), status=$('status'), canvas=document.createElement('canvas'), ctx=canvas.getContext('2d',{willReadFrequently:true});
+  canvas.width=canvas.height=INFO.input_size;
+  let session=null,stream=null,running=false,lastRun=0,busy=false;
+  INFO.classes.forEach(name=>{const row=document.createElement('div');row.className='row';row.innerHTML=`<div class="rowtop"><span>${name}</span><strong>—</strong></div><div class="track"><div class="fill"></div></div>`;$('results').append(row)});
+  function setStatus(text,error=false){status.textContent=text;status.classList.toggle('error',error)}
+  async function loadModel(){try{const meta=await fetch('./model_info.json').then(r=>{if(!r.ok)throw new Error('Could not load model_info.json');return r.json()});if(!Array.isArray(meta.classes)||meta.classes.length!==4||!Number.isInteger(meta.input_size)||meta.mean?.length!==3||meta.std?.length!==3)throw new Error('Unexpected model_info.json format');INFO=meta;canvas.width=canvas.height=INFO.input_size;ort.env.wasm.numThreads=1;ort.env.wasm.simd=true;ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';session=await ort.InferenceSession.create('./leaf_model.onnx',{executionProviders:['wasm']});setStatus('Model ready. Start the camera or choose a photo.');if(running)loop()}catch(e){setStatus('Could not load model: '+e.message,true)}}
+  function cropDraw(source,w,h){const side=Math.min(w,h),sx=(w-side)/2,sy=(h-side)/2;ctx.drawImage(source,sx,sy,side,side,0,0,INFO.input_size,INFO.input_size)}
+  async function classify(source,w,h,label){if(!session||busy||!w||!h)return;busy=true;try{cropDraw(source,w,h);const pixels=ctx.getImageData(0,0,INFO.input_size,INFO.input_size).data,n=INFO.input_size*INFO.input_size,data=new Float32Array(3*n);for(let i=0;i<n;i++){data[i]=(pixels[4*i]/255-INFO.mean[0])/INFO.std[0];data[n+i]=(pixels[4*i+1]/255-INFO.mean[1])/INFO.std[1];data[2*n+i]=(pixels[4*i+2]/255-INFO.mean[2])/INFO.std[2]}const input=new ort.Tensor('float32',data,[1,3,INFO.input_size,INFO.input_size]);const output=await session.run({[session.inputNames[0]]:input});const raw=Array.from(output[session.outputNames[0]].data).slice(0,INFO.classes.length);const sum=raw.reduce((a,b)=>a+b,0);let probs;if(raw.every(x=>x>=0&&x<=1)&&Math.abs(sum-1)<0.02)probs=raw;else{const max=Math.max(...raw),exps=raw.map(x=>Math.exp(x-max)),total=exps.reduce((a,b)=>a+b,0);probs=exps.map(x=>x/total)}const ranked=probs.map((p,i)=>[p,i]).sort((a,b)=>b[0]-a[0]);$('mode').textContent=label+' · '+INFO.classes[ranked[0][1]];[...$('results').children].forEach((row,i)=>{row.querySelector('strong').textContent=(probs[i]*100).toFixed(4)+'%';row.querySelector('.fill').style.width=(probs[i]*100)+'%'})}catch(e){setStatus('Inference failed: '+e.message,true)}finally{busy=false}}
+  async function loop(){if(!running)return;if(video.readyState>=2&&performance.now()-lastRun>240){lastRun=performance.now();classify(video,video.videoWidth,video.videoHeight,'live camera')}requestAnimationFrame(loop)}
+  $('cameraBtn').addEventListener('click',async()=>{if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;running=false;stage.classList.remove('live');$('cameraBtn').textContent='Start rear camera';setStatus('Camera stopped.');return}try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:1280}}});video.srcObject=stream;await video.play();running=true;stage.classList.add('live');$('cameraBtn').textContent='Stop camera';setStatus('Camera live. Keep a leaf in the square guide.');if(session)loop()}catch(e){setStatus('Camera unavailable. Allow camera access or choose a photo. '+e.message,true)}});
+  $('fileInput').addEventListener('change',e=>{const file=e.target.files&&e.target.files[0];if(!file)return;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}running=false;stage.classList.remove('live');$('cameraBtn').textContent='Start rear camera';const url=URL.createObjectURL(file),img=$('photo');img.onload=()=>{classify(img,img.naturalWidth,img.naturalHeight,'uploaded photo');setStatus('Classifying selected photo…');URL.revokeObjectURL(url)};img.src=url});
+  $('pageLink').href=PAGE_URL;$('pageLink').textContent=PAGE_URL;
+  if(window.QRCode){QRCode.toCanvas($('qr'),PAGE_URL,{width:224,margin:1,errorCorrectionLevel:'M'},err=>{if(err)setStatus('Could not generate QR code: '+err.message,true)})}else setStatus('QR code library did not load.',true);
+  loadModel();
+})();
+</script></body></html>
